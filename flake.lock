@@ -1,0 +1,81 @@
+{
+  "nodes": {
+    "gravity-bootloader": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1794288994,
+        "narHash": "sha256-NUHM5INS4hlnEDjliiNbZ0wjoRreHA6AMTwbSHitOrg=",
+        "owner": "GravityLinux",
+        "repo": "bootloader",
+        "rev": "f5f5d4520587b6b8e2d8eb4d866baae129f47765",
+        "type": "github"
+      },
+      "original": {
+        "owner": "GravityLinux",
+        "repo": "bootloader",
+        "rev": "f5f5d4520587b6b8e2d8eb4d866baae129f47765",
+        "type": "github"
+      }
+    },
+    "gravity-linux": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1795095000,
+        "narHash": "sha256-c+fOJqeqqwiHs9Cdz0RVZ/nReLgh0VEF3iEbGuq6o4E=",
+        "owner": "GravityLinux",
+        "repo": "linux",
+        "rev": "c7e7b86aed0c4c052851e5c3b2c02088c0602f02",
+        "type": "github"
+      },
+      "original": {
+        "owner": "GravityLinux",
+        "repo": "linux",
+        "rev": "c7e7b86aed0c4c052851e5c3b2c02088c0602f02",
+        "type": "github"
+      }
+    },
+    "gravity-packages": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1795138776,
+        "narHash": "sha256-LNwdHXPheMSO/PdWGhYvwbsQRwIJuiZTdwWSZ+qEnzs=",
+        "owner": "GravityLinux",
+        "repo": "packages",
+        "rev": "2664badde5808d75644964d00d3b8ebc22abdba4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "GravityLinux",
+        "repo": "packages",
+        "rev": "2664badde5808d75644964d00d3b8ebc22abdba4",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1795085501,
+        "narHash": "sha256-S5keGWzaKpuXo9MNoIC2FfTIuTyTnx8P4NhYJMEsTLI=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "0bb8272318b4ca41bf0edc6224df3e3e3046b70d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "gravity-bootloader": "gravity-bootloader",
+        "gravity-linux": "gravity-linux",
+        "gravity-packages": "gravity-packages",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
