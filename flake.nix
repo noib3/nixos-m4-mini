@@ -103,6 +103,7 @@
           m1n1 = linuxPkgs.m1n1-gravity;
         };
         vm-boots = linuxPkgs.callPackage ./checks/vm-boots.nix { inherit self; };
+        vm-luks = linuxPkgs.callPackage ./checks/vm-luks.nix { inherit self; };
       };
 
       formatter.${darwinSystem} = darwinPkgs.nixfmt;
