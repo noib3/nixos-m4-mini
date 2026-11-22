@@ -27,10 +27,10 @@
       "/nix" = subvolume "@nix";
       "/home" = subvolume "@home";
 
-      # Gravity's installer formats the EFI system partition with volume ID
-      # 0x1e99841a.
+      # The device is hardware.m4mini.espDevice, the udev link to the EFI
+      # system partition named by the device tree.
       "/boot" = {
-        device = "/dev/disk/by-uuid/1E99-841A";
+        device = "/dev/disk/gravity-esp";
         fsType = "vfat";
         options = [
           "fmask=0077"

@@ -20,6 +20,10 @@ let
 
   passphrase = "supersecret";
 
+  # The PARTUUID of the target disk's EFI system partition. On the mini, the
+  # device tree names it.
+  espPartUuid = "5f3b6d0e-2a4c-4e8f-9b1d-7c6a0e2f4b8d";
+
   # nixpkgs' test key pair for initrd SSH.
   clientKey = "${path}/nixos/tests/initrd-network-ssh/id_ed25519";
 
@@ -65,6 +69,10 @@ testers.runNixOSTest {
       ];
 
       hardware.m4mini.loadVendorFirmware = false;
+
+      # QEMU's device tree has no /chosen/gravity,efi-system-partition.
+      hardware.m4mini.espPartUuidFile = "/etc/m4mini-esp-partuuid";
+      environment.etc."m4mini-esp-partuuid".text = lib.toUpper espPartUuid;
 
       # SSH in the initrd, configured as a user would. The m4mini module
       # makes it work on the mini.
@@ -132,9 +140,9 @@ testers.runNixOSTest {
           installer.wait_for_unit("multi-user.target")
           disk = "/dev/disk/by-id/virtio-target"
           installer.succeed(
-              f"sgdisk -n 1:0:+256M -t 1:ef00 -c 1:EFI -n 2:0:0 -t 2:8300 -c 2:nixos {disk}",
+              f"sgdisk -n 1:0:+256M -t 1:ef00 -c 1:EFI -u 1:${espPartUuid} -n 2:0:0 -t 2:8300 -c 2:nixos {disk}",
               "udevadm settle",
-              "mkfs.vfat -F 32 -i 1E99841A /dev/disk/by-partlabel/EFI",
+              "mkfs.vfat -F 32 /dev/disk/by-partlabel/EFI",
               "echo -n ${passphrase} | cryptsetup luksFormat --type luks2 --iter-time 1 -q /dev/disk/by-partlabel/nixos -",
               "echo -n ${passphrase} | cryptsetup open --key-file - /dev/disk/by-partlabel/nixos cryptroot",
               "mkfs.btrfs /dev/mapper/cryptroot",
@@ -159,6 +167,7 @@ testers.runNixOSTest {
               "/home": ("/dev/mapper/cryptroot", "btrfs", "subvol=/@home"),
               "/boot": ("/dev/vda1", "vfat", None),
           }
+          mini.succeed("test \"$(readlink -f /dev/disk/gravity-esp)\" = /dev/vda1")
           for target, (source, fstype, option) in mounts.items():
               found = mini.succeed(f"findmnt -n -o SOURCE,FSTYPE,OPTIONS --mountpoint {target}").split()
               assert found[0].startswith(source), f"{target} is mounted from {found[0]}, not {source}"

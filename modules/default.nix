@@ -7,6 +7,7 @@
     ./kernel.nix
     ./firmware.nix
     ./boot.nix
+    ./esp.nix
     ./initrd-bluetooth.nix
     ./initrd-ssh.nix
     # TODO(fedora): remove with the module once Gravity's Fedora is deleted.

@@ -39,7 +39,7 @@ writeShellApplication {
     util-linux
   ];
   text = ''
-    esp_uuid=1E99-841A
+    esp_property=/proc/device-tree/chosen/gravity,efi-system-partition
     min_bytes=$((20 * 1024 * 1024 * 1024))
     mnt=/mnt/nixos
 
@@ -53,12 +53,19 @@ writeShellApplication {
       || die "this is not an M4 Mac mini (J773g)"
     [ -e /dev/disk/by-partlabel/nixos ] && die "a partition named nixos already exists"
 
-    esp=$(readlink -f /dev/disk/by-uuid/$esp_uuid) || die "no EFI system partition with volume ID $esp_uuid"
+    # NixOS mounts the EFI system partition the device tree names, so it must be
+    # the one Fedora mounts at /boot/efi.
+    [ -e "$esp_property" ] || die "the device tree has no $esp_property"
+    esp_partuuid=$(tr -d '\0' < "$esp_property" | tr '[:upper:]' '[:lower:]')
+    esp=$(readlink -e "/dev/disk/by-partuuid/$esp_partuuid") \
+      || die "no partition has the PARTUUID $esp_partuuid of $esp_property"
+    fedora_esp=$(findmnt -n -o SOURCE /boot/efi) || die "Fedora's EFI system partition is not mounted at /boot/efi"
+    [ "$(readlink -e "$fedora_esp")" = "$esp" ] \
+      || die "Fedora's /boot/efi ($fedora_esp) is not $esp, the EFI system partition $esp_property names"
     disk=/dev/$(lsblk -n -o PKNAME "$esp")
     fedora_boot=$(findmnt -n -o SOURCE /boot) || die "Fedora's /boot is not mounted"
     [ "$(lsblk -n -o LABEL "$fedora_boot")" = BOOT ] \
       || die "Fedora's /boot ($fedora_boot) is not labeled BOOT; set hardware.m4mini.fedoraGrub.device"
-    findmnt -n /boot/efi > /dev/null || die "Fedora's EFI system partition is not mounted at /boot/efi"
 
     # The keyboard paired in Fedora types the passphrase at NixOS's first boot.
     # Each pairing is a directory /var/lib/bluetooth/ADAPTER/DEVICE with an
