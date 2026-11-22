@@ -35,7 +35,9 @@ in
     ];
     # The password of the first login. Change it with passwd.
     initialPassword = "nixos";
-    openssh.authorizedKeys.keys = [ ];
+    openssh.authorizedKeys.keys = [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBR0fRHiedXs8UV27LKQjG17SpRJT4taAALl9w5FRhmU noib3@skunk"
+    ];
   };
 
   nix.settings.experimental-features = [
