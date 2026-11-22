@@ -6,10 +6,10 @@
 # Installs NixOS from Gravity's Fedora on the mini. It creates the "nixos"
 # partition in the largest free block of the internal disk, formats it as LUKS2
 # holding a btrfs filesystem with the subvolumes @root, @nix and @home, and
-# installs SYSTEM there with Fedora's Bluetooth pairings. SYSTEM's bootloader
-# hook adds a GRUB entry with ID "nixos" to Fedora's /boot, and
-# `grub2-reboot nixos` then boots NixOS once. Nothing else on the disk is
-# modified.
+# installs SYSTEM there with Fedora's Bluetooth pairings and Wi-Fi
+# connections. SYSTEM's bootloader hook adds a GRUB entry with ID "nixos" to
+# Fedora's /boot, and `grub2-reboot nixos` then boots NixOS once. Nothing else
+# on the disk is modified.
 {
   lib,
   writeShellApplication,
@@ -109,6 +109,11 @@ writeShellApplication {
     # come from the new root's /var/lib/bluetooth.
     install -d -m 0755 "$mnt/var/lib"
     cp -r --preserve=mode,timestamps /var/lib/bluetooth "$mnt/var/lib/bluetooth"
+
+    # NixOS's NetworkManager joins Fedora's Wi-Fi networks from the first boot.
+    install -d -m 0755 "$mnt/etc/NetworkManager"
+    cp -r --preserve=mode,timestamps /etc/NetworkManager/system-connections \
+      "$mnt/etc/NetworkManager/system-connections"
 
     nixos-install --root "$mnt" --system ${system} --no-root-passwd --no-channel-copy
 
