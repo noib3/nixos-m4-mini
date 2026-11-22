@@ -66,6 +66,12 @@
       nixosConfigurations = {
         mini-minimal = mkSystem [ ./hosts/minimal.nix ];
 
+        # TODO(fedora): remove once NixOS boots from m1n1/boot.bin on the mini.
+        mini-minimal-fedora-grub = mkSystem [
+          ./hosts/minimal.nix
+          { hardware.m4mini.fedoraGrub.enable = true; }
+        ];
+
         mini-vm = mkSystem [
           ./hosts/minimal.nix
           ./hosts/vm.nix
@@ -77,6 +83,11 @@
         inherit (linuxPkgs) linux-gravity m1n1-gravity;
         boot-bin = self.nixosConfigurations.mini-minimal.config.system.build.m1n1BootBin;
         default = self.nixosConfigurations.mini-minimal.config.system.build.toplevel;
+
+        # TODO(fedora): remove once NixOS boots from m1n1/boot.bin on the mini.
+        install-from-fedora = linuxPkgs.callPackage ./packages/install-from-fedora.nix {
+          system = self.nixosConfigurations.mini-minimal-fedora-grub.config.system.build.toplevel;
+        };
       };
 
       packages.${darwinSystem} = {

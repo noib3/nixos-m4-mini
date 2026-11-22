@@ -21,6 +21,7 @@ let
     runtimeInputs = with pkgs; [
       coreutils
       diffutils
+      gnugrep
       gzip
       util-linux
     ];
@@ -52,6 +53,14 @@ let
       if [ -e "$esp/m1n1/boot.bin" ] && cmp -s "$esp/m1n1/boot.bin" "$esp/m1n1/boot.bin.new"; then
         rm "$esp/m1n1/boot.bin.new"
         exit 0
+      fi
+
+      # TODO(fedora): remove once Gravity's Fedora is deleted. The first
+      # boot.bin NixOS replaces is Gravity's, kept as boot.bin.fedora for good,
+      # while boot.bin.prev only holds the previous generation.
+      if [ -e "$esp/m1n1/boot.bin" ] && [ ! -e "$esp/m1n1/boot.bin.fedora" ] \
+        && ! grep -a -q 'chosen.bootargs=init=/nix/store/' "$esp/m1n1/boot.bin"; then
+        cp "$esp/m1n1/boot.bin" "$esp/m1n1/boot.bin.fedora"
       fi
 
       if [ -e "$esp/m1n1/boot.bin" ]; then
