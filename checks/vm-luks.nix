@@ -2,10 +2,13 @@
 # from it directly, as m1n1 does. The first boot uses the system's initrd and
 # answers the LUKS prompt on the console, then installs boot.bin on the disk's
 # EFI system partition. The second boot uses the initrd inside that boot.bin,
-# with its appended secrets, as m1n1 does on the mini. Both boots run
-# bluetoothd in the initrd, which has no adapter to find here.
+# with its appended secrets, and answers the prompt over SSH from the test
+# driver, through a port QEMU forwards into the VM. Both boots run bluetoothd in
+# the initrd, which has no adapter to find here.
 {
   lib,
+  openssh,
+  path,
   python3,
   qemu-utils,
   testers,
@@ -16,6 +19,13 @@ let
   diskLayout = import ../hosts/disk-layout.nix;
 
   passphrase = "supersecret";
+
+  # nixpkgs' test key pair for initrd SSH.
+  clientKey = "${path}/nixos/tests/initrd-network-ssh/id_ed25519";
+
+  # The port on the test driver's host that QEMU forwards to the initrd's SSH
+  # server.
+  sshPort = 2222;
 
   # The disk both VMs attach, created by the test script. QEMU's start script
   # expands the path in the shell, and both VMs run in the test's build
@@ -56,6 +66,22 @@ testers.runNixOSTest {
 
       hardware.m4mini.loadVendorFirmware = false;
 
+      # SSH in the initrd, configured as a user would. The m4mini module
+      # makes it work on the mini.
+      boot.initrd.network.ssh = {
+        enable = true;
+        port = sshPort;
+        authorizedKeys = [ (lib.readFile "${clientKey}.pub") ];
+        hostKeys = [ "/etc/ssh/initrd_ssh_host_ed25519_key" ];
+      };
+      boot.initrd.systemd.network = {
+        enable = true;
+        networks."10-ethernet" = {
+          matchConfig.Type = "ether";
+          networkConfig.DHCP = "yes";
+        };
+      };
+
       # The target disk replaces qemu-vm.nix's root disk image, and the
       # disk layout's filesystems replace its default ones. The Nix store
       # stays the host's.
@@ -66,6 +92,14 @@ testers.runNixOSTest {
         fileSystems = diskLayout.fileSystems;
         qemu.drives = [ targetDrive ];
         memorySize = 2048;
+        # The initrd gets an address on QEMU's user-mode network over DHCP.
+        forwardPorts = [
+          {
+            from = "host";
+            host.port = sshPort;
+            guest.port = sshPort;
+          }
+        ];
       };
 
       services.btrfs.autoScrub.enable = lib.mkForce false;
@@ -150,19 +184,40 @@ testers.runNixOSTest {
                   "${lib.getExe python3}", "-I", "${./boot-bin-layout.py}",
                   "${m1n1Bin}", os.path.join(os.environ["out"], "boot.bin"), "${system}",
                   "--initrd-contains", ".initrd-secrets/var/lib/bluetooth",
+                  "--initrd-contains", ".initrd-secrets/etc/ssh/initrd_ssh_host_ed25519_key",
                   "--initrd-out", initrd,
               ],
               check=True,
           )
           mini.shutdown()
 
-      with subtest("the boot.bin initrd unlocks the disk"):
+      with subtest("the boot.bin initrd unlocks the disk over SSH"):
           # QEMU takes the last -initrd, so this replaces the system's initrd
           # with the one from boot.bin.
           os.environ["QEMU_OPTS"] = f"-initrd {initrd}"
           mini.start()
-          mini.wait_for_console_text("Please enter passphrase for disk")
-          mini.send_console("${passphrase}\n")
+
+          # ssh refuses a private key other users can read.
+          key = os.path.join(build, "client-key")
+          with open("${clientKey}", "rb") as source, open(key, "wb") as target:
+              target.write(source.read())
+          os.chmod(key, 0o600)
+          ssh = [
+              "${lib.getExe' openssh "ssh"}", "-i", key,
+              "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+              "-o", "ConnectTimeout=5", "-p", "${toString sshPort}", "root@127.0.0.1",
+          ]
+
+          def initrd_ssh_is_up(_):
+              return subprocess.run(ssh + ["true"], capture_output=True).returncode == 0
+
+          retry(initrd_ssh_is_up, timeout_seconds=600)
+          subprocess.run(
+              ssh + ["-tt", "systemd-tty-ask-password-agent", "--query"],
+              input=b"${passphrase}\n",
+              check=True,
+              timeout=120,
+          )
           mini.wait_for_unit("multi-user.target")
           mini.succeed("journalctl -b --grep 'Started Bluetooth in the initrd'")
           mini.succeed("findmnt -n --mountpoint / -o SOURCE | grep -q '^/dev/mapper/cryptroot'")
