@@ -93,6 +93,9 @@
       packages.${darwinSystem} = {
         inherit (darwinPkgs) fetch-gravity-kernel-config;
         mini-vm = self.nixosConfigurations.mini-vm.config.system.build.vm;
+
+        # TODO(fedora): remove once NixOS boots from m1n1/boot.bin on the mini.
+        preseed-fedora-ssh = darwinPkgs.callPackage ./packages/preseed-fedora-ssh.nix { };
       };
 
       apps.${darwinSystem} = {
@@ -103,6 +106,10 @@
         fetch-gravity-kernel-config = {
           type = "app";
           program = lib.getExe darwinPkgs.fetch-gravity-kernel-config;
+        };
+        preseed-fedora-ssh = {
+          type = "app";
+          program = lib.getExe self.packages.${darwinSystem}.preseed-fedora-ssh;
         };
       };
 
