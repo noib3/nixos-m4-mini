@@ -1,9 +1,12 @@
 # Partitions a disk as the real install does, then boots the minimal system
-# from it directly, as m1n1 does: the initrd asks for the LUKS passphrase,
-# mounts the btrfs subvolumes, and the system reaches multi-user.target. The
-# test also installs boot.bin on the disk's EFI system partition.
+# from it directly, as m1n1 does. The first boot uses the system's initrd and
+# answers the LUKS prompt on the console, then installs boot.bin on the disk's
+# EFI system partition. The second boot uses the initrd inside that boot.bin,
+# with its appended secrets, as m1n1 does on the mini. Both boots run
+# bluetoothd in the initrd, which has no adapter to find here.
 {
   lib,
+  python3,
   qemu-utils,
   testers,
   self,
@@ -67,6 +70,11 @@ testers.runNixOSTest {
 
       services.btrfs.autoScrub.enable = lib.mkForce false;
 
+      # qemu-vm.nix turns initrd secrets off at priority 10, since QEMU boots
+      # the system's initrd. The mini's boot.bin hook appends them, and the
+      # second boot uses boot.bin's initrd.
+      boot.loader.supportsInitrdSecrets = lib.mkOverride 5 true;
+
       # NixOS test VMs leave out switch-to-configuration by default, and the
       # test installs boot.bin through it.
       system.switch.enable = true;
@@ -82,7 +90,8 @@ testers.runNixOSTest {
       import os
       import subprocess
 
-      image = os.path.join(os.environ["NIX_BUILD_TOP"], "target.img")
+      build = os.environ["NIX_BUILD_TOP"]
+      image = os.path.join(build, "target.img")
       subprocess.run(["${lib.getExe' qemu-utils "qemu-img"}", "create", "-f", "raw", image, "4G"], check=True)
 
       with subtest("the installer partitions the disk"):
@@ -124,15 +133,38 @@ testers.runNixOSTest {
                   assert option in found[2].split(","), f"{target} lacks {option}: {found[2]}"
 
           mini.succeed("uname -r | grep -x 7.3.0")
+          mini.succeed("journalctl -b --grep 'Started Bluetooth in the initrd'")
 
-      with subtest("installing the bootloader writes boot.bin"):
+      with subtest("installing the bootloader writes boot.bin with the initrd secrets"):
           mini.succeed("${system}/bin/switch-to-configuration boot")
-          mini.succeed("cmp -n $(stat -c %s ${m1n1Bin}) ${m1n1Bin} /boot/m1n1/boot.bin")
-          mini.succeed("grep -a -q 'chosen.bootargs=init=${system}/init ' /boot/m1n1/boot.bin")
           mini.fail("test -e /boot/m1n1/boot.bin.prev")
 
           # An identical boot.bin replaces nothing.
           mini.succeed("${system}/bin/switch-to-configuration boot")
           mini.fail("test -e /boot/m1n1/boot.bin.prev")
+
+          mini.copy_from_machine("/boot/m1n1/boot.bin")
+          initrd = os.path.join(build, "initrd-with-secrets.gz")
+          subprocess.run(
+              [
+                  "${lib.getExe python3}", "-I", "${./boot-bin-layout.py}",
+                  "${m1n1Bin}", os.path.join(os.environ["out"], "boot.bin"), "${system}",
+                  "--initrd-contains", ".initrd-secrets/var/lib/bluetooth",
+                  "--initrd-out", initrd,
+              ],
+              check=True,
+          )
+          mini.shutdown()
+
+      with subtest("the boot.bin initrd unlocks the disk"):
+          # QEMU takes the last -initrd, so this replaces the system's initrd
+          # with the one from boot.bin.
+          os.environ["QEMU_OPTS"] = f"-initrd {initrd}"
+          mini.start()
+          mini.wait_for_console_text("Please enter passphrase for disk")
+          mini.send_console("${passphrase}\n")
+          mini.wait_for_unit("multi-user.target")
+          mini.succeed("journalctl -b --grep 'Started Bluetooth in the initrd'")
+          mini.succeed("findmnt -n --mountpoint / -o SOURCE | grep -q '^/dev/mapper/cryptroot'")
     '';
 }

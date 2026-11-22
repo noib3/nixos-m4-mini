@@ -18,6 +18,7 @@
   hardware.m4mini = {
     writeBootBin = false;
     loadVendorFirmware = false;
+    initrdBluetooth.enable = lib.mkForce false;
   };
   boot.initrd.luks.devices = lib.mkForce { };
   services.btrfs.autoScrub.enable = lib.mkForce false;

@@ -1,7 +1,9 @@
 # Writes the stage-2 boot object m1n1 loads from m1n1/boot.bin on the EFI
 # system partition. The file is m1n1 followed by its payloads: the device tree,
 # the gzipped kernel, the gzipped initrd, and a `chosen.bootargs=` line m1n1
-# copies into the device tree's /chosen node as the kernel command line.
+# copies into the device tree's /chosen node as the kernel command line. The
+# initrd is the system's, or the optional INITRD argument, which must be a single
+# gzip stream.
 {
   writeShellApplication,
   coreutils,
@@ -15,8 +17,8 @@ writeShellApplication {
     gzip
   ];
   text = ''
-    if [ "$#" -ne 4 ]; then
-      echo "usage: mk-m1n1-boot-bin M1N1_BIN DEVICE_TREE SYSTEM OUT" >&2
+    if [ "$#" -ne 4 ] && [ "$#" -ne 5 ]; then
+      echo "usage: mk-m1n1-boot-bin M1N1_BIN DEVICE_TREE SYSTEM OUT [INITRD]" >&2
       exit 2
     fi
 
@@ -24,6 +26,7 @@ writeShellApplication {
     dtb=$2
     system=$3
     out=$4
+    initrd=''${5:-$system/initrd}
 
     if [ ! -f "$system/dtbs/$dtb" ]; then
       echo "mk-m1n1-boot-bin: $system has no device tree $dtb" >&2
@@ -31,8 +34,8 @@ writeShellApplication {
     fi
 
     # m1n1 recognizes gzip and xz payloads only.
-    if [ "$(head -c 2 "$system/initrd" | od -An -tx1 | tr -d ' ')" != "1f8b" ]; then
-      echo "mk-m1n1-boot-bin: $system/initrd is not gzip-compressed" >&2
+    if [ "$(head -c 2 "$initrd" | od -An -tx1 | tr -d ' ')" != "1f8b" ]; then
+      echo "mk-m1n1-boot-bin: $initrd is not gzip-compressed" >&2
       exit 1
     fi
 
@@ -48,7 +51,7 @@ writeShellApplication {
       cat "$m1n1"
       cat "$system/dtbs/$dtb"
       gzip -n -c "$system/kernel"
-      cat "$system/initrd"
+      cat "$initrd"
       printf 'chosen.bootargs=%s\n' "$bootargs"
     } > "$out"
   '';

@@ -19,6 +19,9 @@ in
   networking.networkmanager.enable = true;
   hardware.bluetooth.enable = true;
 
+  # The Bluetooth keyboard types the LUKS passphrase.
+  hardware.m4mini.initrdBluetooth.enable = true;
+
   services.openssh = {
     enable = true;
     settings.PasswordAuthentication = false;

@@ -1,6 +1,8 @@
 """Checks the payloads of an m1n1 boot.bin, with the magic numbers of m1n1's
 src/payload.c."""
 
+import argparse
+import gzip
 import struct
 import sys
 import zlib
@@ -55,8 +57,35 @@ def payloads(data):
             offset += len(line) + 1
 
 
+def cpio_names(data):
+    """The file names of the concatenated newc cpio archives in data."""
+    names = []
+    offset = 0
+    while offset < len(data):
+        if data[offset : offset + 6] != CPIO_MAGIC:
+            # Zero padding between and after archives.
+            offset += 1
+            continue
+        header = data[offset : offset + 110]
+        file_size = int(header[54:62], 16)
+        name_size = int(header[94:102], 16)
+        name = data[offset + 110 : offset + 110 + name_size - 1].decode()
+        offset += (110 + name_size + 3) & ~3
+        offset += (file_size + 3) & ~3
+        if name != "TRAILER!!!":
+            names.append(name)
+    return names
+
+
 def main():
-    m1n1_path, boot_bin_path, system = sys.argv[1:]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("m1n1")
+    parser.add_argument("boot_bin")
+    parser.add_argument("system")
+    parser.add_argument("--initrd-contains", action="append", default=[], metavar="PATH")
+    parser.add_argument("--initrd-out", metavar="FILE")
+    args = parser.parse_args()
+    m1n1_path, boot_bin_path, system = args.m1n1, args.boot_bin, args.system
 
     with open(m1n1_path, "rb") as f:
         m1n1 = f.read()
@@ -79,6 +108,17 @@ def main():
     bootargs = found[3][1]
     if not bootargs.startswith(f"chosen.bootargs=init={system}/init "):
         fail(f"the command line doesn't start {system}'s init: {bootargs}")
+
+    initrd = found[2][1]
+    names = set(cpio_names(initrd))
+    for path in args.initrd_contains:
+        if path not in names:
+            secrets = sorted(name for name in names if "initrd-secrets" in name)
+            fail(f"the initrd has no {path}; its secrets are {secrets}")
+
+    if args.initrd_out is not None:
+        with open(args.initrd_out, "wb") as f:
+            f.write(gzip.compress(initrd))
 
     print(f"boot-bin-layout: {kinds}, {bootargs}")
 

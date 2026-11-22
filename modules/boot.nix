@@ -1,7 +1,8 @@
 # Boots the system straight from m1n1, without U-Boot or an EFI bootloader.
 # Each generation's kernel, initrd and command line go into m1n1/boot.bin on
 # the EFI system partition, and the boot.bin it replaces is kept as
-# m1n1/boot.bin.prev.
+# m1n1/boot.bin.prev. The initrd in boot.bin carries boot.initrd.secrets,
+# appended when boot.bin is written.
 {
   config,
   lib,
@@ -20,6 +21,7 @@ let
     runtimeInputs = with pkgs; [
       coreutils
       diffutils
+      gzip
       util-linux
     ];
     text = ''
@@ -31,8 +33,21 @@ let
         exit 1
       fi
 
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+
+      # The secrets' sources must exist before they are appended.
+      ${cfg.initrdSecretsSetup}
+
+      # append-initrd-secrets adds a second gzip member, and m1n1 may only read
+      # the first, so the result is recompressed as one stream.
+      cp "$system/initrd" "$tmp/initrd"
+      chmod u+w "$tmp/initrd"
+      ${config.system.build.initialRamdiskSecretAppender}/bin/append-initrd-secrets "$tmp/initrd"
+      gzip -d -c "$tmp/initrd" | gzip -n -c > "$tmp/initrd.gz"
+
       mkdir -p "$esp/m1n1"
-      ${mkBootBin} ${m1n1Bin} ${lib.escapeShellArg cfg.deviceTree} "$system" "$esp/m1n1/boot.bin.new"
+      ${mkBootBin} ${m1n1Bin} ${lib.escapeShellArg cfg.deviceTree} "$system" "$esp/m1n1/boot.bin.new" "$tmp/initrd.gz"
 
       if [ -e "$esp/m1n1/boot.bin" ] && cmp -s "$esp/m1n1/boot.bin" "$esp/m1n1/boot.bin.new"; then
         rm "$esp/m1n1/boot.bin.new"
@@ -74,6 +89,16 @@ in
         bootloader starts NixOS's kernel.
       '';
     };
+
+    initrdSecretsSetup = lib.mkOption {
+      type = lib.types.lines;
+      default = "";
+      internal = true;
+      description = ''
+        The shell commands, run as root before boot.bin is written, that
+        create missing sources of boot.initrd.secrets.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -81,6 +106,8 @@ in
       enable = true;
       installHook = if cfg.writeBootBin then lib.getExe installHook else skipHook;
     };
+
+    boot.loader.supportsInitrdSecrets = cfg.writeBootBin;
 
     system.build.m1n1BootBin = pkgs.runCommand "m1n1-boot.bin" { } ''
       ${mkBootBin} ${m1n1Bin} ${lib.escapeShellArg cfg.deviceTree} ${config.system.build.toplevel} $out
